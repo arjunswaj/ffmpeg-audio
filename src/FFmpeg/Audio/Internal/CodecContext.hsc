@@ -18,7 +18,6 @@ import Foreign.Concurrent (newForeignPtr)
 import Foreign.ForeignPtr
     (ForeignPtr, finalizeForeignPtr, withForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
-import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
 import Foreign.Storable (Storable, pokeByteOff)

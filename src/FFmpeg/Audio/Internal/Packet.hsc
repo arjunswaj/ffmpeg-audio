@@ -5,21 +5,18 @@ module FFmpeg.Audio.Internal.Packet
     , freePacket
     , withPacket
     , getPacketPtr
-    , getPacketData
-    , getPacketSize
     ) where
 
 #include <libavcodec/packet.h>
 
 import Control.Exception (bracket, throwIO)
-import Foreign.C.Types (CInt, CUChar)
 import Foreign.Concurrent (newForeignPtr)
 import Foreign.ForeignPtr
     (ForeignPtr, finalizeForeignPtr, withForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
-import Foreign.Storable (peekByteOff, pokeByteOff)
+import Foreign.Storable (pokeByteOff)
 
 import FFmpeg.Audio.Internal.Error (FFmpegError(..))
 import FFmpeg.Audio.Internal.FFI
@@ -55,14 +52,3 @@ withPacket action =
 
 getPacketPtr :: PacketHandle -> Ptr AVPacket
 getPacketPtr (PacketHandle fptr) = unsafeForeignPtrToPtr fptr
-
-getPacketData :: PacketHandle -> IO (Ptr CUChar)
-getPacketData (PacketHandle fptr) =
-    withForeignPtr fptr $ \ptr ->
-        peekByteOff (castPtr ptr) packetDataOffset
-
-getPacketSize :: PacketHandle -> IO Int
-getPacketSize (PacketHandle fptr) =
-    withForeignPtr fptr $ \ptr -> do
-        sz <- peekByteOff (castPtr ptr) packetSizeOffset :: IO CInt
-        return (fromIntegral sz)

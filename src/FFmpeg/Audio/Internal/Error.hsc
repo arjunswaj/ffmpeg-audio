@@ -2,7 +2,6 @@
 
 module FFmpeg.Audio.Internal.Error
     ( FFmpegError(..)
-    , throwFFmpegError
     , avErrorToString
     , errorNonNegative
     ) where
@@ -33,11 +32,6 @@ avErrorToString errCode =
     allocaBytes 64 $ \buf -> do
         _ <- c_av_strerror (fromIntegral errCode) buf (64 :: CULong)
         peekCString buf
-
-throwFFmpegError :: Int -> IO a
-throwFFmpegError code = do
-    msg <- avErrorToString code
-    throwIO $ FFmpegError code msg
 
 errorNonNegative :: String -> Int -> IO Int
 errorNonNegative context code
