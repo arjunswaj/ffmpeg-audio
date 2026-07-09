@@ -31,3 +31,15 @@ foreign import ccall unsafe "avcodec_free_context"
 
 foreign import ccall unsafe "av_channel_layout_default"
     av_channel_layout_default :: Ptr AVChannelLayout -> CInt -> IO ()
+
+foreign import ccall unsafe "av_frame_alloc"
+    c_av_frame_alloc :: IO (Ptr AVFrame)
+
+foreign import ccall unsafe "av_frame_get_buffer"
+    c_av_frame_get_buffer :: Ptr AVFrame -> CInt -> IO CInt
+
+foreign import ccall unsafe "av_frame_make_writable"
+    c_av_frame_make_writable :: Ptr AVFrame -> IO CInt
+
+foreign import ccall unsafe "av_frame_free"
+    c_av_frame_free :: Ptr (Ptr AVFrame) -> IO ()

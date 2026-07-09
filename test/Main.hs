@@ -5,6 +5,7 @@ import Data.Vector qualified as V
 import ErrorSpec qualified
 import CodecSpec qualified
 import CodecContextSpec qualified
+import FrameSpec qualified
 
 main :: IO ()
 main = do
@@ -16,4 +17,5 @@ main = do
   ErrorSpec.tests
   CodecSpec.tests
   CodecContextSpec.tests
+  FrameSpec.tests
   putStrLn "All tests passed!"

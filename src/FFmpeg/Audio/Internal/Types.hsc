@@ -54,3 +54,20 @@ avChannelLayoutMono = #{const AV_CH_LAYOUT_MONO}
 
 avChannelLayoutStereo :: #{type uint64_t}
 avChannelLayoutStereo = #{const AV_CH_LAYOUT_STEREO}
+
+-- AVFrame field offsets
+frameNbSamplesOffset :: Int
+frameNbSamplesOffset = #{offset AVFrame, nb_samples}
+
+frameSampleRateOffset :: Int
+frameSampleRateOffset = #{offset AVFrame, sample_rate}
+
+frameFormatOffset :: Int
+frameFormatOffset = #{offset AVFrame, format}
+
+frameChLayoutOffset :: Int
+frameChLayoutOffset = #{offset AVFrame, ch_layout}
+
+-- | AVFrame flag: 0 means do not enforce alignment (use default)
+avFrameBufferAlign0 :: CInt
+avFrameBufferAlign0 = 0
