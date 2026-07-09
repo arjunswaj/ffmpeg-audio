@@ -28,6 +28,7 @@ library
         FFmpeg.Audio.Internal.Frame
         FFmpeg.Audio.Internal.Packet
         FFmpeg.Audio.Internal.Format
+        FFmpeg.Audio.Internal.Encoder
     build-tool-depends: hsc2hs:hsc2hs
     build-depends:
         base ^>=4.20.2.0,
@@ -42,9 +43,10 @@ test-suite ffmpeg-audio-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
-    other-modules:    ErrorSpec, CodecSpec, CodecContextSpec, FrameSpec, PacketSpec, FormatSpec
+    other-modules:    ErrorSpec, CodecSpec, CodecContextSpec, FrameSpec, PacketSpec, FormatSpec, EncoderSpec
     build-depends:
         base ^>=4.20.2.0,
         ffmpeg-audio,
-        vector >=0.13 && <0.14
+        vector >=0.13 && <0.14,
+        directory >=1.3 && <1.4
     default-language: GHC2024

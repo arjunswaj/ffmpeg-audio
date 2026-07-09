@@ -8,6 +8,7 @@ import CodecContextSpec qualified
 import FrameSpec qualified
 import PacketSpec qualified
 import FormatSpec qualified
+import EncoderSpec qualified
 
 main :: IO ()
 main = do
@@ -22,4 +23,5 @@ main = do
   FrameSpec.tests
   PacketSpec.tests
   FormatSpec.tests
+  EncoderSpec.tests
   putStrLn "All tests passed!"

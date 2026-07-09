@@ -94,3 +94,14 @@ streamCodecparOffset = #{offset AVStream, codecpar}
 -- AVFormatContext field offsets
 formatPbOffset :: Int
 formatPbOffset = #{offset AVFormatContext, pb}
+
+-- AVERROR constants for encoder loop
+averrorEagain :: CInt
+averrorEagain = #{const AVERROR(EAGAIN)}
+
+averrorEof :: CInt
+averrorEof = #{const AVERROR_EOF}
+
+-- AVFrame.data array offset (first field, typically 0)
+frameDataArrayOffset :: Int
+frameDataArrayOffset = #{offset AVFrame, data}

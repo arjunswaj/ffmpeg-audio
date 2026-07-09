@@ -91,3 +91,15 @@ foreign import ccall unsafe "avformat_write_header"
 -- avformat_free_context
 foreign import ccall unsafe "avformat_free_context"
     c_avformat_free_context :: Ptr AVFormatContext -> IO ()
+
+-- avcodec_send_frame
+foreign import ccall unsafe "avcodec_send_frame"
+    c_avcodec_send_frame :: Ptr AVCodecContext -> Ptr AVFrame -> IO CInt
+
+-- avcodec_receive_packet
+foreign import ccall unsafe "avcodec_receive_packet"
+    c_avcodec_receive_packet :: Ptr AVCodecContext -> Ptr AVPacket -> IO CInt
+
+-- av_samples_get_buffer_size
+foreign import ccall unsafe "av_samples_get_buffer_size"
+    c_av_samples_get_buffer_size :: Ptr CInt -> CInt -> CInt -> CInt -> CInt -> IO CInt
