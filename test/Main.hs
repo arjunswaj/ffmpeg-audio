@@ -2,6 +2,7 @@ module Main (main) where
 
 import FFmpeg.Audio.PCMBuffer (PCMBuffer (..))
 import Data.Vector qualified as V
+import ErrorSpec qualified
 
 main :: IO ()
 main = do
@@ -10,4 +11,5 @@ main = do
   putStrLn $ "Sample rate: " ++ show (pcmSampleRate buf)
   putStrLn $ "Channels: " ++ show (pcmChannels buf)
   putStrLn $ "Samples length: " ++ show (V.length (pcmSamples buf))
+  ErrorSpec.tests
   putStrLn "All tests passed!"
