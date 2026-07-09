@@ -20,10 +20,15 @@ library
     import:           warnings
     exposed-modules:
         FFmpeg.Audio.PCMBuffer
+        FFmpeg.Audio.Internal.Types
+        FFmpeg.Audio.Internal.FFI
     other-modules:
+    build-tool-depends: hsc2hs:hsc2hs
     build-depends:
         base ^>=4.20.2.0,
-        vector >=0.13 && <0.14
+        vector >=0.13 && <0.14,
+        bytestring >=0.12 && <0.13
+    pkgconfig-depends: libavcodec, libavformat, libavutil
     hs-source-dirs:   src
     default-language: GHC2024
 
