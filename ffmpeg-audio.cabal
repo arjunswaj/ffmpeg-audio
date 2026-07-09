@@ -26,6 +26,7 @@ library
         FFmpeg.Audio.Internal.Codec
         FFmpeg.Audio.Internal.CodecContext
         FFmpeg.Audio.Internal.Frame
+        FFmpeg.Audio.Internal.Packet
     build-tool-depends: hsc2hs:hsc2hs
     build-depends:
         base ^>=4.20.2.0,
@@ -40,7 +41,7 @@ test-suite ffmpeg-audio-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
-    other-modules:    ErrorSpec, CodecSpec, CodecContextSpec, FrameSpec
+    other-modules:    ErrorSpec, CodecSpec, CodecContextSpec, FrameSpec, PacketSpec
     build-depends:
         base ^>=4.20.2.0,
         ffmpeg-audio,

@@ -71,3 +71,10 @@ frameChLayoutOffset = #{offset AVFrame, ch_layout}
 -- | AVFrame flag: 0 means do not enforce alignment (use default)
 avFrameBufferAlign0 :: CInt
 avFrameBufferAlign0 = 0
+
+-- AVPacket field offsets
+packetDataOffset :: Int
+packetDataOffset = #{offset AVPacket, data}
+
+packetSizeOffset :: Int
+packetSizeOffset = #{offset AVPacket, size}

@@ -43,3 +43,15 @@ foreign import ccall unsafe "av_frame_make_writable"
 
 foreign import ccall unsafe "av_frame_free"
     c_av_frame_free :: Ptr (Ptr AVFrame) -> IO ()
+
+-- av_packet_alloc
+foreign import ccall unsafe "av_packet_alloc"
+    c_av_packet_alloc :: IO (Ptr AVPacket)
+
+-- av_packet_unref
+foreign import ccall unsafe "av_packet_unref"
+    c_av_packet_unref :: Ptr AVPacket -> IO ()
+
+-- av_packet_free
+foreign import ccall unsafe "av_packet_free"
+    c_av_packet_free :: Ptr (Ptr AVPacket) -> IO ()
