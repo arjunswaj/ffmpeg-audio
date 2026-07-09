@@ -55,3 +55,39 @@ foreign import ccall unsafe "av_packet_unref"
 -- av_packet_free
 foreign import ccall unsafe "av_packet_free"
     c_av_packet_free :: Ptr (Ptr AVPacket) -> IO ()
+
+-- avcodec_parameters_from_context
+foreign import ccall unsafe "avcodec_parameters_from_context"
+    c_avcodec_parameters_from_context :: Ptr AVCodecParameters -> Ptr AVCodecContext -> IO CInt
+
+-- avformat_alloc_output_context2
+foreign import ccall unsafe "avformat_alloc_output_context2"
+    c_avformat_alloc_output_context2 :: Ptr (Ptr AVFormatContext) -> Ptr () -> CString -> CString -> IO CInt
+
+-- avio_open
+foreign import ccall unsafe "avio_open"
+    c_avio_open :: Ptr (Ptr AVIOContext) -> CString -> CInt -> IO CInt
+
+-- avformat_new_stream
+foreign import ccall unsafe "avformat_new_stream"
+    c_avformat_new_stream :: Ptr AVFormatContext -> Ptr AVCodec -> IO (Ptr AVStream)
+
+-- av_interleaved_write_frame
+foreign import ccall unsafe "av_interleaved_write_frame"
+    c_av_interleaved_write_frame :: Ptr AVFormatContext -> Ptr AVPacket -> IO CInt
+
+-- av_write_trailer
+foreign import ccall unsafe "av_write_trailer"
+    c_av_write_trailer :: Ptr AVFormatContext -> IO CInt
+
+-- avio_closep
+foreign import ccall unsafe "avio_closep"
+    c_avio_closep :: Ptr (Ptr AVIOContext) -> IO CInt
+
+-- avformat_write_header
+foreign import ccall unsafe "avformat_write_header"
+    c_avformat_write_header :: Ptr AVFormatContext -> Ptr () -> IO CInt
+
+-- avformat_free_context
+foreign import ccall unsafe "avformat_free_context"
+    c_avformat_free_context :: Ptr AVFormatContext -> IO ()

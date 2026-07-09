@@ -13,6 +13,7 @@ data AVFrame
 data AVPacket
 data AVStream
 data AVChannelLayout
+data AVCodecParameters
 
 type AVSampleFormat = CInt
 type AVCodecID = CInt
@@ -72,9 +73,24 @@ frameChLayoutOffset = #{offset AVFrame, ch_layout}
 avFrameBufferAlign0 :: CInt
 avFrameBufferAlign0 = 0
 
+-- AVIOContext flag constants
+avioFlagWrite :: CInt
+avioFlagWrite = #{const AVIO_FLAG_WRITE}
+
 -- AVPacket field offsets
 packetDataOffset :: Int
 packetDataOffset = #{offset AVPacket, data}
 
 packetSizeOffset :: Int
 packetSizeOffset = #{offset AVPacket, size}
+
+packetStreamIndexOffset :: Int
+packetStreamIndexOffset = #{offset AVPacket, stream_index}
+
+-- AVStream field offsets
+streamCodecparOffset :: Int
+streamCodecparOffset = #{offset AVStream, codecpar}
+
+-- AVFormatContext field offsets
+formatPbOffset :: Int
+formatPbOffset = #{offset AVFormatContext, pb}
