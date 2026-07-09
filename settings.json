@@ -1,0 +1,9 @@
+{
+    "git.enabled": false,
+    "scm.diffDecorations": "none",
+    "git.mergeEditor": false,
+    "files.eol": "\n",
+    "[haskell]": {
+        "editor.formatOnSave": true
+    }
+}
