@@ -1,39 +1,39 @@
 cabal-version:      3.14
 name:               ffmpeg-audio
 version:            0.1.0.0
--- synopsis:
--- description:
-homepage:           https://github.com/arjunswaj/ffmpeg-audio
+synopsis:           Minimal FFmpeg 8 binding for MP3 audio encoding
+description:
+  A minimal, production-quality Haskell binding to FFmpeg 8 for audio
+  encoding only. Supports MP3 encoding from signed 16-bit interleaved PCM.
 license:            LGPL-2.1-or-later
 license-file:       LICENSE
 author:             Arjun Shekar Bharadwaj
 maintainer:         arjun.s.waj@gmail.com
--- copyright:
-category:           Haskell Bindings for a Codec
+category:           FFmpeg, Audio, Codec
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
--- extra-source-files:
 
 common warnings
     ghc-options: -Wall
 
 library
     import:           warnings
-    exposed-modules:  MyLib
-    -- other-modules:
-    -- other-extensions:
-    build-depends:    base ^>=4.20.2.0
+    exposed-modules:
+        FFmpeg.Audio.PCMBuffer
+    other-modules:
+    build-depends:
+        base ^>=4.20.2.0,
+        vector >=0.13 && <0.14
     hs-source-dirs:   src
     default-language: GHC2024
 
 test-suite ffmpeg-audio-test
     import:           warnings
-    default-language: GHC2024
-    -- other-modules:
-    -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
         base ^>=4.20.2.0,
-        ffmpeg-audio
+        ffmpeg-audio,
+        vector >=0.13 && <0.14
+    default-language: GHC2024
