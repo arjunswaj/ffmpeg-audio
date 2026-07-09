@@ -19,3 +19,15 @@ foreign import ccall unsafe "av_strerror"
 -- avcodec_find_encoder_by_name
 foreign import ccall unsafe "avcodec_find_encoder_by_name"
     c_avcodec_find_encoder_by_name :: CString -> IO (Ptr AVCodec)
+
+foreign import ccall unsafe "avcodec_alloc_context3"
+    c_avcodec_alloc_context3 :: Ptr AVCodec -> IO (Ptr AVCodecContext)
+
+foreign import ccall unsafe "avcodec_open2"
+    c_avcodec_open2 :: Ptr AVCodecContext -> Ptr AVCodec -> Ptr () -> IO CInt
+
+foreign import ccall unsafe "avcodec_free_context"
+    c_avcodec_free_context :: Ptr (Ptr AVCodecContext) -> IO ()
+
+foreign import ccall unsafe "av_channel_layout_default"
+    av_channel_layout_default :: Ptr AVChannelLayout -> CInt -> IO ()

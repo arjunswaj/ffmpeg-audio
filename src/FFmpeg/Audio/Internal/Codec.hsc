@@ -1,6 +1,7 @@
 module FFmpeg.Audio.Internal.Codec
     ( findMp3Encoder
     , CodecHandle(..)
+    , getCodecPtr
     ) where
 
 import Control.Exception (throwIO)
@@ -21,3 +22,6 @@ findMp3Encoder =
         if ptr == nullPtr
             then throwIO $ FFmpegError (-1) "MP3 encoder (libmp3lame) not found. Install FFmpeg with --enable-libmp3lame."
             else return $ CodecHandle ptr
+
+getCodecPtr :: CodecHandle -> Ptr AVCodec
+getCodecPtr (CodecHandle p) = p

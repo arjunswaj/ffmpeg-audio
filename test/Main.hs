@@ -4,6 +4,7 @@ import FFmpeg.Audio.PCMBuffer (PCMBuffer (..))
 import Data.Vector qualified as V
 import ErrorSpec qualified
 import CodecSpec qualified
+import CodecContextSpec qualified
 
 main :: IO ()
 main = do
@@ -14,4 +15,5 @@ main = do
   putStrLn $ "Samples length: " ++ show (V.length (pcmSamples buf))
   ErrorSpec.tests
   CodecSpec.tests
+  CodecContextSpec.tests
   putStrLn "All tests passed!"

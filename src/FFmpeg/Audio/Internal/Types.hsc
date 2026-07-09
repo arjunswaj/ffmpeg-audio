@@ -2,6 +2,7 @@ module FFmpeg.Audio.Internal.Types where
 
 import Foreign.C.Types
 import Foreign.Ptr
+import Data.Word (Word64)
 
 -- | Opaque FFmpeg types (forward declarations)
 data AVFormatContext
@@ -11,6 +12,7 @@ data AVCodecContext
 data AVFrame
 data AVPacket
 data AVStream
+data AVChannelLayout
 
 type AVSampleFormat = CInt
 type AVCodecID = CInt
@@ -45,3 +47,10 @@ type AVMediaType = CInt
 #{enum AVMediaType,
  , avMediaTypeAudio       = AVMEDIA_TYPE_AUDIO
  }
+
+-- Channel layout constants
+avChannelLayoutMono :: #{type uint64_t}
+avChannelLayoutMono = #{const AV_CH_LAYOUT_MONO}
+
+avChannelLayoutStereo :: #{type uint64_t}
+avChannelLayoutStereo = #{const AV_CH_LAYOUT_STEREO}
