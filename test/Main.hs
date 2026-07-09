@@ -1,7 +1,8 @@
 module Main (main) where
 
-import FFmpeg.Audio.PCMBuffer (PCMBuffer (..))
+import FFmpeg.Audio (PCMBuffer(..), encodeMp3)
 import Data.Vector qualified as V
+import System.Directory (removeFile)
 import ErrorSpec qualified
 import CodecSpec qualified
 import CodecContextSpec qualified
@@ -17,6 +18,9 @@ main = do
   putStrLn $ "Sample rate: " ++ show (pcmSampleRate buf)
   putStrLn $ "Channels: " ++ show (pcmChannels buf)
   putStrLn $ "Samples length: " ++ show (V.length (pcmSamples buf))
+  _ <- encodeMp3 "/tmp/public-api-test.mp3" buf
+  putStrLn $ "encodeMp3 via public API wrote /tmp/public-api-test.mp3"
+  removeFile "/tmp/public-api-test.mp3"
   ErrorSpec.tests
   CodecSpec.tests
   CodecContextSpec.tests
