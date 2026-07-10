@@ -3,7 +3,6 @@ module FFmpeg.Audio.Internal.FFI where
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
-import Foreign.Storable (Storable(..))
 import FFmpeg.Audio.Internal.Types
 
 #include <libavcodec/avcodec.h>

@@ -1,7 +1,6 @@
 module FFmpeg.Audio.Internal.Types where
 
 import Foreign.C.Types
-import Foreign.Ptr
 import Data.Word (Word64)
 
 -- | Opaque FFmpeg types (forward declarations)
