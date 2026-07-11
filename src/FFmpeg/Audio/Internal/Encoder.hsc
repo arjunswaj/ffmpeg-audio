@@ -3,11 +3,11 @@ module FFmpeg.Audio.Internal.Encoder
     ) where
 
 import Control.Monad (when)
-import Data.Int (Int16)
+import Data.Int (Int16, Int64)
 import Data.Vector qualified as V
 import Foreign.C.Types (CUChar)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
-import Foreign.Storable (peekByteOff, pokeElemOff, sizeOf)
+import Foreign.Storable (peekByteOff, pokeByteOff, pokeElemOff, sizeOf)
 import FFmpeg.Audio.Internal.Codec (findMp3Encoder)
 import FFmpeg.Audio.Internal.CodecContext (CodecContextHandle, getCodecContextPtr, withCodecContext)
 import FFmpeg.Audio.Internal.Error (errorNonNegative)
@@ -15,7 +15,7 @@ import FFmpeg.Audio.Internal.FFI
 import FFmpeg.Audio.Internal.Format (FormatContextHandle, withOutputFile, writeFrame)
 import FFmpeg.Audio.Internal.Frame (FrameHandle, getFramePtr, withFrame, makeFrameWritable)
 import FFmpeg.Audio.Internal.Packet (withPacket, unrefPacket, getPacketPtr)
-import FFmpeg.Audio.Internal.Types (AVFrame, avSampleFormatS16P, averrorEagain, averrorEof, frameDataArrayOffset)
+import FFmpeg.Audio.Internal.Types (AVFrame, avSampleFormatS16P, averrorEagain, averrorEof, frameDataArrayOffset, framePtsOffset)
 import FFmpeg.Audio.PCMBuffer (PCMBuffer(..))
 
 mp3FrameSize :: Int
@@ -62,6 +62,7 @@ sendFrameData ctx fmt samples channels sampleRate frameSize frameIdx =
         makeFrameWritable fh
         let offset = frameIdx * frameSize * channels
         deinterleaveToFrame (getFramePtr fh) samples channels frameSize offset
+        pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral (frameIdx * frameSize) :: Int64)
         doSendAndReceive ctx fmt fh
 
 sendPartialFrame :: CodecContextHandle -> FormatContextHandle -> V.Vector Int16 -> Int -> Int -> Int -> Int -> Int -> IO ()
@@ -69,6 +70,7 @@ sendPartialFrame ctx fmt samples channels sampleRate _frameSize startOffset rema
     withFrame remaining sampleRate channels avSampleFormatS16P $ \fh -> do
         makeFrameWritable fh
         deinterleaveToFrame (getFramePtr fh) samples channels remaining startOffset
+        pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral startOffset :: Int64)
         doSendAndReceive ctx fmt fh
 
 doSendAndReceive :: CodecContextHandle -> FormatContextHandle -> FrameHandle -> IO ()

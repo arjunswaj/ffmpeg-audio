@@ -68,6 +68,9 @@ frameFormatOffset = #{offset AVFrame, format}
 frameChLayoutOffset :: Int
 frameChLayoutOffset = #{offset AVFrame, ch_layout}
 
+framePtsOffset :: Int
+framePtsOffset = #{offset AVFrame, pts}
+
 -- | AVFrame flag: 0 means do not enforce alignment (use default)
 avFrameBufferAlign0 :: CInt
 avFrameBufferAlign0 = 0
