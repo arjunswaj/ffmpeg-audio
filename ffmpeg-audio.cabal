@@ -1,10 +1,11 @@
 cabal-version:      3.12
 name:               ffmpeg-audio
 version:            0.1.0.0
-synopsis:           Minimal FFmpeg 8 binding for MP3 audio encoding
+synopsis:           FFmpeg binding for stereo, multi-channel, Ambisonics, and IAMF audio encoding
 description:
-  A minimal, production-quality Haskell binding to FFmpeg 8 for audio
-  encoding only. Supports MP3 encoding from signed 16-bit interleaved PCM.
+  A Haskell binding to FFmpeg 7.1+ for audio encoding, supporting MP3,
+  24-bit multi-channel FLAC, Opus (including Ambisonics mapping families 2/3),
+  AAC, E-AC-3, LPCM, and native IAMF / Eclipsa Audio stream groups.
 license:            LGPL-2.1-or-later
 license-file:       LICENSE
 author:             Arjun Shekar Bharadwaj
@@ -22,6 +23,7 @@ library
         FFmpeg.Audio
         FFmpeg.Audio.PCMBuffer
         FFmpeg.Audio.Encoder
+        FFmpeg.Audio.IAMF
         FFmpeg.Audio.Internal.Types
         FFmpeg.Audio.Internal.FFI
         FFmpeg.Audio.Internal.Error
@@ -31,6 +33,8 @@ library
         FFmpeg.Audio.Internal.Packet
         FFmpeg.Audio.Internal.Format
         FFmpeg.Audio.Internal.Encoder
+        FFmpeg.Audio.Internal.Iamf
+        FFmpeg.Audio.Internal.StreamGroup
     build-tool-depends: hsc2hs:hsc2hs
     build-depends:
         base ^>=4.20.2.0,
@@ -46,7 +50,16 @@ test-suite ffmpeg-audio-test
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
-    other-modules:    ErrorSpec, CodecSpec, CodecContextSpec, FrameSpec, PacketSpec, FormatSpec, EncoderSpec
+    other-modules:
+        ErrorSpec
+        CodecSpec
+        CodecContextSpec
+        FrameSpec
+        PacketSpec
+        FormatSpec
+        EncoderSpec
+        MultiChannelSpec
+        IamfSpec
     build-depends:
         base ^>=4.20.2.0,
         ffmpeg-audio,

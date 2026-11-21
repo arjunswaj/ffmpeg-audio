@@ -10,6 +10,8 @@ import FrameSpec qualified
 import PacketSpec qualified
 import FormatSpec qualified
 import EncoderSpec qualified
+import MultiChannelSpec qualified
+import IamfSpec qualified
 
 main :: IO ()
 main = do
@@ -19,7 +21,7 @@ main = do
   putStrLn $ "Channels: " ++ show (pcmChannels buf)
   putStrLn $ "Samples length: " ++ show (V.length (pcmSamples buf))
   _ <- encodeMp3 "/tmp/public-api-test.mp3" buf
-  putStrLn $ "encodeMp3 via public API wrote /tmp/public-api-test.mp3"
+  putStrLn "encodeMp3 via public API wrote /tmp/public-api-test.mp3"
   removeFile "/tmp/public-api-test.mp3"
   ErrorSpec.tests
   CodecSpec.tests
@@ -28,4 +30,6 @@ main = do
   PacketSpec.tests
   FormatSpec.tests
   EncoderSpec.tests
+  MultiChannelSpec.tests
+  IamfSpec.tests
   putStrLn "All tests passed!"
