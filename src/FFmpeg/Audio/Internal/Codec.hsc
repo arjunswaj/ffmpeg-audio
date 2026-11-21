@@ -1,14 +1,30 @@
 module FFmpeg.Audio.Internal.Codec
     ( findMp3Encoder
+    , findEncoderByName
+    , findEncoderById
     , CodecHandle(..)
     , getCodecPtr
+    , codecCapabilities
+    , codecSupportsSmallLastFrame
     ) where
 
 import Control.Exception (throwIO)
+import Data.Bits ((.&.), (.|.))
 import Foreign.C.String (withCString)
-import Foreign.Ptr (Ptr, nullPtr)
-import FFmpeg.Audio.Internal.Types (AVCodec)
-import FFmpeg.Audio.Internal.FFI (c_avcodec_find_encoder_by_name)
+import Foreign.C.Types (CInt)
+import Foreign.Ptr (Ptr, castPtr, nullPtr)
+import Foreign.Storable (peekByteOff)
+import FFmpeg.Audio.Internal.Types
+    ( AVCodec
+    , AVCodecID
+    , avCodecCapabilitiesOffset
+    , avCodecCapSmallLastFrame
+    , avCodecCapVariableFrameSize
+    )
+import FFmpeg.Audio.Internal.FFI
+    ( c_avcodec_find_encoder
+    , c_avcodec_find_encoder_by_name
+    )
 import FFmpeg.Audio.Internal.Error (FFmpegError(..))
 
 #include <libavcodec/avcodec.h>
@@ -23,5 +39,29 @@ findMp3Encoder =
             then throwIO $ FFmpegError (-1) "MP3 encoder (libmp3lame) not found. Install FFmpeg with --enable-libmp3lame."
             else return $ CodecHandle ptr
 
+findEncoderByName :: String -> IO CodecHandle
+findEncoderByName codecName =
+    withCString codecName $ \cName -> do
+        ptr <- c_avcodec_find_encoder_by_name cName
+        if ptr == nullPtr
+            then throwIO $ FFmpegError (-1) ("Audio encoder not found: " ++ codecName)
+            else return $ CodecHandle ptr
+
+findEncoderById :: AVCodecID -> IO CodecHandle
+findEncoderById codecId = do
+    ptr <- c_avcodec_find_encoder codecId
+    if ptr == nullPtr
+        then throwIO $ FFmpegError (-1) ("Audio encoder not found for codec id: " ++ show codecId)
+        else return $ CodecHandle ptr
+
 getCodecPtr :: CodecHandle -> Ptr AVCodec
 getCodecPtr (CodecHandle p) = p
+
+codecCapabilities :: CodecHandle -> IO CInt
+codecCapabilities (CodecHandle p) =
+    peekByteOff (castPtr p) avCodecCapabilitiesOffset
+
+codecSupportsSmallLastFrame :: CodecHandle -> IO Bool
+codecSupportsSmallLastFrame ch = do
+    caps <- codecCapabilities ch
+    return ((caps .&. (avCodecCapSmallLastFrame .|. avCodecCapVariableFrameSize)) /= 0)

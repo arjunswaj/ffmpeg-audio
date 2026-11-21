@@ -1,37 +1,75 @@
--- |
--- Module      : FFmpeg.Audio.Encoder
--- Description : High-level MP3 encoding functions
--- License     : LGPL-2.1-or-later
---
--- Provides 'encodeMp3' and 'encodeMp3LBS' as the public encoding API.
 module FFmpeg.Audio.Encoder
     ( encodeMp3
     , encodeMp3LBS
+    , AudioCodec(..)
+    , CodecConfig(..)
+    , defaultMp3Config
+    , defaultFlac24Config
+    , defaultOpusConfig
+    , defaultOpusAmbisonicsConfig
+    , defaultAacConfig
+    , defaultEac3Config
+    , encodeAudio
+    , encodeAudioBS
+    , encodeFloatMp3
+    , encodeFlac24
+    , encodeOpus
     ) where
 
-import FFmpeg.Audio.Internal.Encoder (encodePcmToFile)
-import FFmpeg.Audio.PCMBuffer (PCMBuffer)
-import qualified Data.ByteString as BS
-import System.IO (openTempFile, hClose)
+import Control.Exception (finally)
+import Data.ByteString qualified as BS
+import FFmpeg.Audio.Internal.Encoder
+    ( AudioCodec(..)
+    , CodecConfig(..)
+    , defaultAacConfig
+    , defaultEac3Config
+    , defaultExtensionFor
+    , defaultFlac24Config
+    , defaultMp3Config
+    , defaultOpusAmbisonicsConfig
+    , defaultOpusConfig
+    , encodeAudioToFile
+    , encodePcmToFile
+    )
+import FFmpeg.Audio.PCMBuffer
+    ( AudioBuffer
+    , PCMBuffer
+    , PCMBufferFloat
+    , fromPCMBufferFloat
+    )
 import System.Directory (removeFile)
+import System.IO (hClose, openTempFile)
 
--- | Encode PCM audio data to an MP3 file.
---
--- Writes the encoded MP3 data to the given file path.
--- Throws 'FFmpegError' on failure (e.g. invalid parameters, FFmpeg error).
 encodeMp3 :: FilePath -> PCMBuffer -> IO ()
 encodeMp3 = encodePcmToFile
 
--- | Encode PCM audio data to an MP3 'BS.ByteString'.
---
--- Encodes the buffer in memory and returns the MP3 data as a strict
--- 'BS.ByteString'. Uses a temporary file internally.
--- Throws 'FFmpegError' on failure.
 encodeMp3LBS :: PCMBuffer -> IO BS.ByteString
 encodeMp3LBS buf = do
     (path, h) <- openTempFile "/tmp" "ffmpeg-audio.mp3"
     hClose h
-    encodeMp3 path buf
-    bytes <- BS.readFile path
-    removeFile path
-    return bytes
+    finally
+        (encodeMp3 path buf >> BS.readFile path)
+        (removeFile path)
+
+encodeAudio :: FilePath -> CodecConfig -> AudioBuffer -> IO ()
+encodeAudio = encodeAudioToFile
+
+encodeAudioBS :: CodecConfig -> AudioBuffer -> IO BS.ByteString
+encodeAudioBS cfg buf = do
+    let ext = case codecFormatName cfg of
+            Just f -> '.' : f
+            Nothing -> defaultExtensionFor (codecType cfg)
+    (path, h) <- openTempFile "/tmp" ("ffmpeg-audio" ++ ext)
+    hClose h
+    finally
+        (encodeAudio path cfg buf >> BS.readFile path)
+        (removeFile path)
+
+encodeFloatMp3 :: FilePath -> PCMBufferFloat -> IO ()
+encodeFloatMp3 path buf = encodeAudio path defaultMp3Config (fromPCMBufferFloat buf)
+
+encodeFlac24 :: FilePath -> AudioBuffer -> IO ()
+encodeFlac24 path = encodeAudio path defaultFlac24Config
+
+encodeOpus :: FilePath -> CodecConfig -> AudioBuffer -> IO ()
+encodeOpus = encodeAudio

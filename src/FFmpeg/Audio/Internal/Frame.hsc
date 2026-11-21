@@ -5,7 +5,9 @@ module FFmpeg.Audio.Internal.Frame
     , makeFrameWritable
     , freeFrame
     , withFrame
+    , withFrameWithLayout
     , setFrameParams
+    , setFrameParamsWithLayout
     , getFramePtr
     ) where
 
@@ -22,9 +24,11 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
 import Foreign.Storable (pokeByteOff)
 
+import FFmpeg.Audio.Internal.CodecContext (initChannelLayout)
 import FFmpeg.Audio.Internal.Error (FFmpegError(..), errorNonNegative)
 import FFmpeg.Audio.Internal.FFI
 import FFmpeg.Audio.Internal.Types
+import FFmpeg.Audio.PCMBuffer (ChannelLayout)
 
 newtype FrameHandle = FrameHandle (ForeignPtr AVFrame)
 
@@ -49,6 +53,15 @@ setFrameParams (FrameHandle fptr) nsamples rate chans fmt =
         let chLayoutPtr = castPtr (ptr `plusPtr` frameChLayoutOffset)
         av_channel_layout_default chLayoutPtr (fromIntegral chans)
 
+setFrameParamsWithLayout :: FrameHandle -> Int -> Int -> ChannelLayout -> AVSampleFormat -> IO ()
+setFrameParamsWithLayout (FrameHandle fptr) nsamples rate layout fmt =
+    withForeignPtr fptr $ \ptr -> do
+        pokeByteOff (castPtr ptr) frameNbSamplesOffset (fromIntegral nsamples :: CInt)
+        pokeByteOff (castPtr ptr) frameSampleRateOffset (fromIntegral rate :: CInt)
+        pokeByteOff (castPtr ptr) frameFormatOffset fmt
+        let chLayoutPtr = castPtr (ptr `plusPtr` frameChLayoutOffset)
+        initChannelLayout chLayoutPtr layout
+
 getFrameBuffer :: FrameHandle -> IO ()
 getFrameBuffer (FrameHandle fptr) =
     withForeignPtr fptr $ \ptr -> do
@@ -72,6 +85,13 @@ withFrame nsamples rate chans fmt action =
         allocateFrame
         freeFrame
         (\h -> setFrameParams h nsamples rate chans fmt >> getFrameBuffer h >> action h)
+
+withFrameWithLayout :: Int -> Int -> ChannelLayout -> AVSampleFormat -> (FrameHandle -> IO a) -> IO a
+withFrameWithLayout nsamples rate layout fmt action =
+    bracket
+        allocateFrame
+        freeFrame
+        (\h -> setFrameParamsWithLayout h nsamples rate layout fmt >> getFrameBuffer h >> action h)
 
 getFramePtr :: FrameHandle -> Ptr AVFrame
 getFramePtr (FrameHandle fptr) = unsafeForeignPtrToPtr fptr
