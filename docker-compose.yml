@@ -1,0 +1,38 @@
+name: ffmpeg-audio
+
+# Everything in this repo runs in Docker. The host only runs `docker compose`
+# and `.devcontainer/exec.sh`; it never runs GHC, cabal, ormolu, or hlint.
+#
+#   docker compose --profile dev up -d --build dev   # dev toolchain container
+#   docker compose down                              # stop and remove
+
+services:
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    image: ffmpeg-audio-dev:local
+    init: true
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    environment:
+      SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+      GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new"
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+    volumes:
+      - .:/workspace
+      - dist-newstyle:/workspace/dist-newstyle
+      - cabal-store:/root/.cabal
+      - ${HOME}/.gitconfig:/root/.gitconfig
+      - ${HOME}/.config/jj:/root/.config/jj
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+
+volumes:
+  dist-newstyle:
+    name: ffmpeg-audio-dist-newstyle
+  cabal-store:
+    name: ffmpeg-audio-cabal-store

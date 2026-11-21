@@ -15,6 +15,7 @@ tests :: IO ()
 tests = do
     testEncodeMono
     testEncodeStereo
+    testEncodeStereo48k
     testEncodePartialFrame
     testEncodeEmpty
     testEncodeMonoViaAPI
@@ -92,6 +93,16 @@ testEncodeStereo = do
     encodeMp3 fp buf
     _ <- checkFile fp "encodeMp3 stereo"
     tryVerifyMp3 fp 44100 2
+    removeFile fp
+
+testEncodeStereo48k :: IO ()
+testEncodeStereo48k = do
+    fp <- makeTempPath
+    let samples = V.replicate (1152 * 4 * 2) (1200 :: Int16)
+        buf = PCMBuffer 48000 2 samples
+    encodeMp3 fp buf
+    _ <- checkFile fp "encodeMp3 stereo 48kHz"
+    tryVerifyMp3 fp 48000 2
     removeFile fp
 
 testEncodePartialFrame :: IO ()
