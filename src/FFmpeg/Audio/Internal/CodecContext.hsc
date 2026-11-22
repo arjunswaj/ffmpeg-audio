@@ -1,13 +1,17 @@
 module FFmpeg.Audio.Internal.CodecContext
     ( CodecContextHandle
     , CodecContextParams(..)
+    , VideoCodecContextParams(..)
     , allocateCodecContext
     , configureCodecContext
     , configureCodecContextWith
+    , configureVideoCodecContext
     , openCodecContext
     , freeCodecContext
     , withCodecContext
     , withCodecContextWith
+    , withVideoCodecContext
+    , withDecoderContext
     , getCodecContextPtr
     , getCodecFrameSize
     , getCodecTimeBase
@@ -50,6 +54,18 @@ data CodecContextParams = CodecContextParams
     , ccIntOptions       :: ![(String, Int64)]
     } deriving (Show, Eq)
 
+data VideoCodecContextParams = VideoCodecContextParams
+    { vcWidth         :: !Int
+    , vcHeight        :: !Int
+    , vcPixFmt        :: !AVPixelFormat
+    , vcTimeBase      :: !AVRational
+    , vcFramerate     :: !AVRational
+    , vcGopSize       :: !Int
+    , vcMaxBFrames    :: !Int
+    , vcGlobalHeader  :: !Bool
+    , vcStringOptions :: ![(String, String)]
+    } deriving (Show, Eq)
+
 sampleRateOffset :: Int
 sampleRateOffset = #{offset AVCodecContext, sample_rate}
 
@@ -74,8 +90,38 @@ bitsPerRawSampleOffset = #{offset AVCodecContext, bits_per_raw_sample}
 timeBaseOffset :: Int
 timeBaseOffset = #{offset AVCodecContext, time_base}
 
+framerateOffset :: Int
+framerateOffset = #{offset AVCodecContext, framerate}
+
 flagsOffset :: Int
 flagsOffset = #{offset AVCodecContext, flags}
+
+widthOffset :: Int
+widthOffset = #{offset AVCodecContext, width}
+
+heightOffset :: Int
+heightOffset = #{offset AVCodecContext, height}
+
+pixFmtOffset :: Int
+pixFmtOffset = #{offset AVCodecContext, pix_fmt}
+
+gopSizeOffset :: Int
+gopSizeOffset = #{offset AVCodecContext, gop_size}
+
+maxBFramesOffset :: Int
+maxBFramesOffset = #{offset AVCodecContext, max_b_frames}
+
+colorRangeOffset :: Int
+colorRangeOffset = #{offset AVCodecContext, color_range}
+
+colorPrimariesOffset :: Int
+colorPrimariesOffset = #{offset AVCodecContext, color_primaries}
+
+colorTrcOffset :: Int
+colorTrcOffset = #{offset AVCodecContext, color_trc}
+
+colorspaceOffset :: Int
+colorspaceOffset = #{offset AVCodecContext, colorspace}
 
 setField :: Storable a => Ptr AVCodecContext -> Int -> a -> IO ()
 setField ptr offset val = pokeByteOff (castPtr ptr) offset val
@@ -86,7 +132,7 @@ initChannelLayout chLayoutPtr layout = do
     case layout of
         LayoutMono -> setMask avChannelLayoutMono
         LayoutStereo -> setMask avChannelLayoutStereo
-        Layout5_1 -> setMask avChannelLayout5Point1
+        Layout5_1 -> setMask avChannelLayout5Point1Back
         Layout7_1 -> setMask avChannelLayout7Point1
         Layout7_1_2 -> setMask avChannelLayout7Point1Point2
         Layout7_1_4 -> setMask avChannelLayout7Point1Point4Back
@@ -154,6 +200,32 @@ configureCodecContextWith h params =
   where
     CodecContextHandle _ fptr = h
 
+configureVideoCodecContext :: CodecContextHandle -> VideoCodecContextParams -> IO ()
+configureVideoCodecContext h params =
+    withForeignPtr fptr $ \ptr -> do
+        setField ptr widthOffset (fromIntegral (vcWidth params) :: CInt)
+        setField ptr heightOffset (fromIntegral (vcHeight params) :: CInt)
+        setField ptr pixFmtOffset (vcPixFmt params)
+        setField ptr timeBaseOffset (vcTimeBase params)
+        setField ptr framerateOffset (vcFramerate params)
+        setField ptr gopSizeOffset (fromIntegral (vcGopSize params) :: CInt)
+        setField ptr maxBFramesOffset (fromIntegral (vcMaxBFrames params) :: CInt)
+        setField ptr colorRangeOffset avColRangeMpeg
+        setField ptr colorPrimariesOffset avColPriBt709
+        setField ptr colorTrcOffset avColTrcBt709
+        setField ptr colorspaceOffset avColSpcBt709
+        when (vcGlobalHeader params) $ do
+            curFlags <- peekByteOff (castPtr ptr) flagsOffset :: IO CInt
+            setField ptr flagsOffset (curFlags .|. avCodecFlagGlobalHeader)
+        forM_ (vcStringOptions params) $ \(k, v) ->
+            withCString k $ \cKey ->
+                withCString v $ \cVal -> do
+                    ret <- c_av_opt_set (castPtr ptr) cKey cVal avOptSearchChildren
+                    _ <- errorNonNegative ("av_opt_set(" ++ k ++ "=" ++ v ++ ")") (fromIntegral ret)
+                    return ()
+  where
+    CodecContextHandle _ fptr = h
+
 openCodecContext :: CodecContextHandle -> IO ()
 openCodecContext h =
     withForeignPtr fptr $ \ptr -> do
@@ -179,6 +251,20 @@ withCodecContextWith codec params action =
         (allocateCodecContext codec)
         freeCodecContext
         (\h -> configureCodecContextWith h params >> openCodecContext h >> action h)
+
+withVideoCodecContext :: CodecHandle -> VideoCodecContextParams -> (CodecContextHandle -> IO a) -> IO a
+withVideoCodecContext codec params action =
+    bracket
+        (allocateCodecContext codec)
+        freeCodecContext
+        (\h -> configureVideoCodecContext h params >> openCodecContext h >> action h)
+
+withDecoderContext :: CodecHandle -> (CodecContextHandle -> IO a) -> IO a
+withDecoderContext codec action =
+    bracket
+        (allocateCodecContext codec)
+        freeCodecContext
+        (\h -> openCodecContext h >> action h)
 
 getCodecContextPtr :: CodecContextHandle -> Ptr AVCodecContext
 getCodecContextPtr (CodecContextHandle _ fptr) =

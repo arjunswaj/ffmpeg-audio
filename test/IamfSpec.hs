@@ -20,6 +20,8 @@ tests = do
     testIamfStereoOpus
     testIamf7_1_4Flac24
     testIamfAmbisonicsFoaOpus
+    testIamfFoaOpusMultiSecondSilenceTail
+    testIamfFlacSilenceTail
     testIamfMp4Opus
     testIamfBSNonEmpty
     putStrLn "All IAMF tests passed!"
@@ -81,6 +83,21 @@ probeIamf fp expectedCodec expectedStreams = do
                     ++ " streams, found " ++ show codecMatches ++ ":\n" ++ outS)
             putStrLn ("    ffprobe verified IAMF: " ++ show codecMatches ++ "x "
                 ++ expectedCodec ++ " streams + Audio Element + Mix Presentation")
+
+assertFfmpegDecodeClean :: FilePath -> String -> IO ()
+assertFfmpegDecodeClean fp label = do
+    (ec, _, err) <- readProcessWithExitCode "ffmpeg"
+        [ "-v", "error"
+        , "-i", fp
+        , "-f", "null"
+        , "-"
+        ] ""
+    case ec of
+        ExitFailure code -> fail (label ++ ": ffmpeg decode failed (" ++ show code ++ "): " ++ err)
+        ExitSuccess -> do
+            unless (null err) $
+                fail (label ++ ": ffmpeg reported stderr on decode:\n" ++ err)
+            putStrLn ("    ffmpeg -v error decode clean for " ++ label)
 
 testInternalIamfHandles :: IO ()
 testInternalIamfHandles = do
@@ -174,7 +191,70 @@ testIamfAmbisonicsFoaOpus = do
         (do
             encodeIamf fp cfg [el]
             assertNonEmpty fp "encodeIamf 4ch FOA Ambisonics Opus (.iamf)"
-            probeIamf fp "opus" 4)
+            probeIamf fp "opus" 4
+            assertFfmpegDecodeClean fp "4ch FOA Ambisonics Opus (.iamf)")
+        (removeFile fp)
+
+testIamfFoaOpusMultiSecondSilenceTail :: IO ()
+testIamfFoaOpusMultiSecondSilenceTail = do
+    fp <- makeTempPath ".iamf"
+    let sr = 48000
+        frames = 144256
+        ch = 4
+        fadeSamples = VS.generate (frames * ch) $ \idx ->
+            let f = idx `div` ch
+                c = idx `mod` ch
+                freq = 220.0 + fromIntegral c * 55.0 :: Double
+                t = fromIntegral f / fromIntegral sr :: Double
+                env
+                    | f < 48000 = 0.25 :: Double
+                    | f < 72000 = 0.25 * (1.0 - fromIntegral (f - 48000) / 24000.0)
+                    | otherwise = 0.0
+            in realToFrac (env * sin (2.0 * pi * freq * t))
+        buf = AudioBuffer sr (LayoutAmbisonic 1) (SampleDataFloat fadeSamples)
+        el = IamfElement
+            { iamfElementLabel = "FOA Scene Silence Tail"
+            , iamfElementKind = IamfSceneElement
+            , iamfElementBuffer = buf
+            , iamfElementGainDb = 0.0
+            , iamfElementHeadphonesMode = IamfHeadphonesBinaural
+            }
+        cfg = defaultIamfConfig
+            { iamfContainer = IamfRaw
+            , iamfCodec = IamfCodecOpus
+            , iamfTargetLayouts = [LayoutStereo, LayoutBinaural]
+            }
+    finally
+        (do
+            encodeIamf fp cfg [el]
+            assertNonEmpty fp "encodeIamf 3s FOA Opus with silence tail (.iamf)"
+            probeIamf fp "opus" 4
+            assertFfmpegDecodeClean fp "3s FOA Opus with silence tail (.iamf)")
+        (removeFile fp)
+
+testIamfFlacSilenceTail :: IO ()
+testIamfFlacSilenceTail = do
+    fp <- makeTempPath ".iamf"
+    let buf = AudioBuffer 48000 LayoutStereo (SampleDataFloat (VS.replicate (9600 * 2) 0.0))
+        el = IamfElement
+            { iamfElementLabel = "Silent Stereo FLAC"
+            , iamfElementKind = IamfChannelElement
+            , iamfElementBuffer = buf
+            , iamfElementGainDb = 0.0
+            , iamfElementHeadphonesMode = IamfHeadphonesStereo
+            }
+        cfg = defaultIamfConfig
+            { iamfContainer = IamfRaw
+            , iamfCodec = IamfCodecFlac
+            , iamfBitRatePerSubstream = Nothing
+            , iamfBitDepth = Just 24
+            }
+    finally
+        (do
+            encodeIamf fp cfg [el]
+            assertNonEmpty fp "encodeIamf silent stereo FLAC (.iamf)"
+            probeIamf fp "flac" 1
+            assertFfmpegDecodeClean fp "silent stereo FLAC (.iamf)")
         (removeFile fp)
 
 testIamfMp4Opus :: IO ()

@@ -28,6 +28,12 @@ foreign import ccall unsafe "avcodec_find_encoder_by_name"
 foreign import ccall unsafe "avcodec_find_encoder"
     c_avcodec_find_encoder :: AVCodecID -> IO (Ptr AVCodec)
 
+foreign import ccall unsafe "avcodec_find_decoder"
+    c_avcodec_find_decoder :: AVCodecID -> IO (Ptr AVCodec)
+
+foreign import ccall unsafe "avcodec_find_decoder_by_name"
+    c_avcodec_find_decoder_by_name :: CString -> IO (Ptr AVCodec)
+
 foreign import ccall unsafe "avcodec_alloc_context3"
     c_avcodec_alloc_context3 :: Ptr AVCodec -> IO (Ptr AVCodecContext)
 
@@ -67,6 +73,9 @@ foreign import ccall unsafe "av_dict_free"
 foreign import ccall unsafe "av_free"
     c_av_free :: Ptr () -> IO ()
 
+foreign import ccall unsafe "av_mallocz"
+    c_av_mallocz :: CSize -> IO (Ptr ())
+
 foreign import ccall unsafe "av_sample_fmt_is_planar"
     c_av_sample_fmt_is_planar :: AVSampleFormat -> CInt
 
@@ -79,11 +88,17 @@ foreign import ccall unsafe "av_frame_get_buffer"
 foreign import ccall unsafe "av_frame_make_writable"
     c_av_frame_make_writable :: Ptr AVFrame -> IO CInt
 
+foreign import ccall unsafe "av_frame_unref"
+    c_av_frame_unref :: Ptr AVFrame -> IO ()
+
 foreign import ccall unsafe "av_frame_free"
     c_av_frame_free :: Ptr (Ptr AVFrame) -> IO ()
 
 foreign import ccall unsafe "av_packet_alloc"
     c_av_packet_alloc :: IO (Ptr AVPacket)
+
+foreign import ccall unsafe "av_new_packet"
+    c_av_new_packet :: Ptr AVPacket -> CInt -> IO CInt
 
 foreign import ccall unsafe "av_packet_unref"
     c_av_packet_unref :: Ptr AVPacket -> IO ()
@@ -123,6 +138,12 @@ foreign import ccall unsafe "avcodec_send_frame"
 
 foreign import ccall unsafe "avcodec_receive_packet"
     c_avcodec_receive_packet :: Ptr AVCodecContext -> Ptr AVPacket -> IO CInt
+
+foreign import ccall unsafe "avcodec_send_packet"
+    c_avcodec_send_packet :: Ptr AVCodecContext -> Ptr AVPacket -> IO CInt
+
+foreign import ccall unsafe "avcodec_receive_frame"
+    c_avcodec_receive_frame :: Ptr AVCodecContext -> Ptr AVFrame -> IO CInt
 
 foreign import ccall unsafe "av_samples_get_buffer_size"
     c_av_samples_get_buffer_size :: Ptr CInt -> CInt -> CInt -> CInt -> CInt -> IO CInt

@@ -22,8 +22,10 @@ library
     exposed-modules:
         FFmpeg.Audio
         FFmpeg.Audio.PCMBuffer
+        FFmpeg.Audio.Metadata
         FFmpeg.Audio.Encoder
         FFmpeg.Audio.IAMF
+        FFmpeg.Audio.MP4
         FFmpeg.Audio.Internal.Types
         FFmpeg.Audio.Internal.FFI
         FFmpeg.Audio.Internal.Error
@@ -34,6 +36,8 @@ library
         FFmpeg.Audio.Internal.Format
         FFmpeg.Audio.Internal.Encoder
         FFmpeg.Audio.Internal.Iamf
+        FFmpeg.Audio.Internal.IamfMux
+        FFmpeg.Audio.Internal.Image
         FFmpeg.Audio.Internal.StreamGroup
     build-tool-depends: hsc2hs:hsc2hs
     build-depends:
@@ -60,6 +64,8 @@ test-suite ffmpeg-audio-test
         EncoderSpec
         MultiChannelSpec
         IamfSpec
+        MetadataSpec
+        Mp4Spec
     build-depends:
         base ^>=4.20.2.0,
         ffmpeg-audio,

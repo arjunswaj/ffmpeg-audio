@@ -11,12 +11,18 @@ module FFmpeg.Audio.Encoder
     , defaultEac3Config
     , encodeAudio
     , encodeAudioBS
+    , encodeAudioWithMetadata
+    , encodeAudioWithMetadataBS
     , encodeFloatMp3
     , encodeFlac24
     , encodeOpus
+    , TimedLyric(..)
+    , AudioMetadata(..)
+    , emptyAudioMetadata
+    , embedMp3Id3v2
     ) where
 
-import Control.Exception (finally)
+import Control.Exception (SomeException, catch, finally)
 import Data.ByteString qualified as BS
 import FFmpeg.Audio.Internal.Encoder
     ( AudioCodec(..)
@@ -29,7 +35,14 @@ import FFmpeg.Audio.Internal.Encoder
     , defaultOpusAmbisonicsConfig
     , defaultOpusConfig
     , encodeAudioToFile
+    , encodeAudioToFileWithMetadata
     , encodePcmToFile
+    )
+import FFmpeg.Audio.Metadata
+    ( AudioMetadata(..)
+    , TimedLyric(..)
+    , embedMp3Id3v2
+    , emptyAudioMetadata
     )
 import FFmpeg.Audio.PCMBuffer
     ( AudioBuffer
@@ -49,7 +62,7 @@ encodeMp3LBS buf = do
     hClose h
     finally
         (encodeMp3 path buf >> BS.readFile path)
-        (removeFile path)
+        (removeFile path `catch` (\(_ :: SomeException) -> return ()))
 
 encodeAudio :: FilePath -> CodecConfig -> AudioBuffer -> IO ()
 encodeAudio = encodeAudioToFile
@@ -63,7 +76,21 @@ encodeAudioBS cfg buf = do
     hClose h
     finally
         (encodeAudio path cfg buf >> BS.readFile path)
-        (removeFile path)
+        (removeFile path `catch` (\(_ :: SomeException) -> return ()))
+
+encodeAudioWithMetadata :: FilePath -> CodecConfig -> AudioMetadata -> AudioBuffer -> IO ()
+encodeAudioWithMetadata = encodeAudioToFileWithMetadata
+
+encodeAudioWithMetadataBS :: CodecConfig -> AudioMetadata -> AudioBuffer -> IO BS.ByteString
+encodeAudioWithMetadataBS cfg meta buf = do
+    let ext = case codecFormatName cfg of
+            Just f -> '.' : f
+            Nothing -> defaultExtensionFor (codecType cfg)
+    (path, h) <- openTempFile "/tmp" ("ffmpeg-audio" ++ ext)
+    hClose h
+    finally
+        (encodeAudioWithMetadata path cfg meta buf >> BS.readFile path)
+        (removeFile path `catch` (\(_ :: SomeException) -> return ()))
 
 encodeFloatMp3 :: FilePath -> PCMBufferFloat -> IO ()
 encodeFloatMp3 path buf = encodeAudio path defaultMp3Config (fromPCMBufferFloat buf)

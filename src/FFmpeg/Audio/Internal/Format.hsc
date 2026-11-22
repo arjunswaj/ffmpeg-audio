@@ -5,10 +5,14 @@ module FFmpeg.Audio.Internal.Format
     , allocateOutputContextWith
     , openOutput
     , createStream
+    , createRawStream
     , setCodecParameters
+    , configureMovTextStream
     , writeHeader
+    , writeHeaderWithOptions
     , writeFrame
     , rescaleAndWriteFrame
+    , writeMovTextPacket
     , writeTrailer
     , closeOutput
     , freeFormatContext
@@ -22,6 +26,10 @@ module FFmpeg.Audio.Internal.Format
     , setStreamId
     , setStreamTimeBase
     , getStreamTimeBase
+    , setStreamDisposition
+    , setStreamAvgFrameRate
+    , setStreamMetadata
+    , setFormatMetadata
     , formatNeedsGlobalHeader
     , setFormatStrictStdCompliance
     ) where
@@ -29,9 +37,13 @@ module FFmpeg.Audio.Internal.Format
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 
-import Control.Exception (bracket, bracket_, catch, throwIO, SomeException)
-import Data.Bits ((.&.))
+import Control.Exception (bracket, bracket_, catch, finally, mask_, throwIO, SomeException)
+import Control.Monad (forM_)
+import Data.Bits ((.&.), shiftR)
+import Data.ByteString qualified as BS
+import Data.ByteString.Unsafe qualified as BSU
 import Data.Int (Int64)
+import Data.Word (Word32, Word8)
 import Foreign.C.String (withCString)
 import Foreign.C.Types (CInt)
 import Foreign.Concurrent (newForeignPtr)
@@ -39,15 +51,16 @@ import Foreign.ForeignPtr
     (ForeignPtr, finalizeForeignPtr, withForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Marshal.Alloc (alloca)
-import Foreign.Ptr (Ptr, castPtr, nullPtr)
-import Foreign.Storable (peekByteOff, pokeByteOff)
+import Foreign.Marshal.Utils (copyBytes)
+import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
+import Foreign.Storable (peekByteOff, pokeByteOff, pokeElemOff)
 
 import FFmpeg.Audio.Internal.Codec (CodecHandle, getCodecPtr)
 import FFmpeg.Audio.Internal.CodecContext
     (CodecContextHandle, getCodecContextPtr, getCodecTimeBase)
 import FFmpeg.Audio.Internal.Error (FFmpegError(..), errorNonNegative)
 import FFmpeg.Audio.Internal.FFI
-import FFmpeg.Audio.Internal.Packet (PacketHandle, getPacketPtr)
+import FFmpeg.Audio.Internal.Packet (PacketHandle, getPacketPtr, unrefPacket, withPacket)
 import FFmpeg.Audio.Internal.Types
 
 newtype FormatContextHandle = FormatContextHandle (ForeignPtr AVFormatContext)
@@ -93,6 +106,14 @@ createStream (FormatContextHandle fptr) codec =
             then throwIO $ FFmpegError (-1) "createStream: avformat_new_stream returned null"
             else return $ StreamHandle ptr
 
+createRawStream :: FormatContextHandle -> IO StreamHandle
+createRawStream (FormatContextHandle fptr) =
+    withForeignPtr fptr $ \ctxPtr -> do
+        ptr <- c_avformat_new_stream ctxPtr nullPtr
+        if ptr == nullPtr
+            then throwIO $ FFmpegError (-1) "createRawStream: avformat_new_stream returned null"
+            else return $ StreamHandle ptr
+
 setCodecParameters :: StreamHandle -> CodecContextHandle -> IO ()
 setCodecParameters (StreamHandle sPtr) cch = do
     let ccPtr = getCodecContextPtr cch
@@ -104,12 +125,63 @@ setCodecParameters (StreamHandle sPtr) cch = do
             _ <- errorNonNegative "avcodec_parameters_from_context" (fromIntegral err)
             return ()
 
+movTextExtradata :: [Word8]
+movTextExtradata =
+    [ 0x00, 0x00, 0x00, 0x00, 0x01, 0xff, 0x00, 0x00
+    , 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    , 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+    , 0x00, 0x10, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00
+    , 0x00, 0x12, 0x66, 0x74, 0x61, 0x62, 0x00, 0x01
+    , 0x00, 0x01, 0x05, 0x41, 0x72, 0x69, 0x61, 0x6c
+    ]
+
+configureMovTextStream :: StreamHandle -> IO ()
+configureMovTextStream (StreamHandle sPtr) = do
+    codecpar <- peekByteOff (castPtr sPtr) streamCodecparOffset :: IO (Ptr AVCodecParameters)
+    if codecpar == nullPtr
+        then throwIO $ FFmpegError (-1) "configureMovTextStream: stream has no codecpar"
+        else mask_ $ do
+            let extraLen = length movTextExtradata
+            rawBuf <- c_av_mallocz (fromIntegral (extraLen + avInputBufferPaddingSize))
+            if rawBuf == nullPtr
+                then throwIO $ FFmpegError (-1) "configureMovTextStream: av_mallocz failed"
+                else do
+                    let byteBuf = castPtr rawBuf :: Ptr Word8
+                    forM_ (zip [0 ..] movTextExtradata) $ \(i, b) ->
+                        pokeElemOff byteBuf i b
+                    pokeByteOff (castPtr codecpar) codecparCodecTypeOffset avMediaTypeSubtitle
+                    pokeByteOff (castPtr codecpar) codecparCodecIdOffset avCodecIdMovText
+                    pokeByteOff (castPtr codecpar) codecparCodecTagOffset (0 :: Word32)
+                    pokeByteOff (castPtr codecpar) codecparExtradataOffset byteBuf
+                    pokeByteOff (castPtr codecpar) codecparExtradataSizeOffset (fromIntegral extraLen :: CInt)
+                    setStreamTimeBase (StreamHandle sPtr) (AVRational 1 1000)
+
 writeHeader :: FormatContextHandle -> IO ()
-writeHeader (FormatContextHandle fptr) =
-    withForeignPtr fptr $ \ctxPtr -> do
-        err <- c_avformat_write_header ctxPtr nullPtr
-        _ <- errorNonNegative "avformat_write_header" (fromIntegral err)
-        return ()
+writeHeader fmt = writeHeaderWithOptions fmt []
+
+writeHeaderWithOptions :: FormatContextHandle -> [(String, String)] -> IO ()
+writeHeaderWithOptions (FormatContextHandle fptr) opts =
+    withForeignPtr fptr $ \ctxPtr ->
+        if null opts
+            then do
+                err <- c_avformat_write_header ctxPtr nullPtr
+                _ <- errorNonNegative "avformat_write_header" (fromIntegral err)
+                return ()
+            else
+                alloca $ \pDict -> do
+                    pokeByteOff (castPtr pDict) (0 :: Int) (nullPtr :: Ptr AVDictionary)
+                    finally
+                        (do
+                            forM_ opts $ \(k, v) ->
+                                withCString k $ \cKey ->
+                                    withCString v $ \cVal -> do
+                                        r <- c_av_dict_set pDict cKey cVal 0
+                                        _ <- errorNonNegative ("av_dict_set(" ++ k ++ ")") (fromIntegral r)
+                                        return ()
+                            err <- c_avformat_write_header ctxPtr (castPtr pDict)
+                            _ <- errorNonNegative "avformat_write_header" (fromIntegral err)
+                            return ())
+                        (c_av_dict_free pDict)
 
 writeFrame :: FormatContextHandle -> PacketHandle -> IO ()
 writeFrame (FormatContextHandle fptr) ph =
@@ -140,6 +212,28 @@ rescaleAndWriteFrame fmt sh srcTb ph = do
     pokeByteOff (castPtr pktPtr) packetDurationOffset (rescaleTimestamp dur srcTb dstTb)
     pokeByteOff (castPtr pktPtr) packetStreamIndexOffset (fromIntegral sIdx :: CInt)
     writeFrame fmt ph
+
+writeMovTextPacket :: FormatContextHandle -> StreamHandle -> Int64 -> Int64 -> BS.ByteString -> IO ()
+writeMovTextPacket fmt sh ptsMs durMs utf8Text =
+    withPacket $ \ph -> do
+        let pktPtr = getPacketPtr ph
+            textLen = min 65535 (BS.length utf8Text)
+            pktSize = 2 + textLen
+        ret <- c_av_new_packet pktPtr (fromIntegral pktSize)
+        _ <- errorNonNegative "av_new_packet(mov_text)" (fromIntegral ret)
+        finally
+            (do
+                dataPtr <- peekByteOff (castPtr pktPtr) packetDataOffset :: IO (Ptr Word8)
+                pokeElemOff dataPtr 0 (fromIntegral ((textLen `shiftR` 8) .&. 0xff))
+                pokeElemOff dataPtr 1 (fromIntegral (textLen .&. 0xff))
+                BSU.unsafeUseAsCString utf8Text $ \srcPtr ->
+                    copyBytes (dataPtr `plusPtr` 2) (castPtr srcPtr) textLen
+                pokeByteOff (castPtr pktPtr) packetPtsOffset ptsMs
+                pokeByteOff (castPtr pktPtr) packetDtsOffset ptsMs
+                pokeByteOff (castPtr pktPtr) packetDurationOffset durMs
+                pokeByteOff (castPtr pktPtr) packetFlagsOffset avPktFlagKey
+                rescaleAndWriteFrame fmt sh (AVRational 1 1000) ph)
+            (unrefPacket ph)
 
 writeTrailer :: FormatContextHandle -> IO ()
 writeTrailer (FormatContextHandle fptr) =
@@ -228,6 +322,33 @@ setStreamTimeBase (StreamHandle p) tb =
 getStreamTimeBase :: StreamHandle -> IO AVRational
 getStreamTimeBase (StreamHandle p) =
     peekByteOff (castPtr p) streamTimeBaseOffset
+
+setStreamDisposition :: StreamHandle -> CInt -> IO ()
+setStreamDisposition (StreamHandle p) disp =
+    pokeByteOff (castPtr p) streamDispositionOffset disp
+
+setStreamAvgFrameRate :: StreamHandle -> AVRational -> IO ()
+setStreamAvgFrameRate (StreamHandle p) rate =
+    pokeByteOff (castPtr p) streamAvgFrameRateOffset rate
+
+setStreamMetadata :: StreamHandle -> String -> String -> IO ()
+setStreamMetadata (StreamHandle p) key val = do
+    let dictPtrPtr = castPtr (p `plusPtr` streamMetadataOffset) :: Ptr (Ptr AVDictionary)
+    withCString key $ \cKey ->
+        withCString val $ \cVal -> do
+            ret <- c_av_dict_set dictPtrPtr cKey cVal 0
+            _ <- errorNonNegative ("av_dict_set(stream:" ++ key ++ ")") (fromIntegral ret)
+            return ()
+
+setFormatMetadata :: FormatContextHandle -> String -> String -> IO ()
+setFormatMetadata (FormatContextHandle fptr) key val =
+    withForeignPtr fptr $ \ctxPtr -> do
+        let dictPtrPtr = castPtr (ctxPtr `plusPtr` formatMetadataOffset) :: Ptr (Ptr AVDictionary)
+        withCString key $ \cKey ->
+            withCString val $ \cVal -> do
+                ret <- c_av_dict_set dictPtrPtr cKey cVal 0
+                _ <- errorNonNegative ("av_dict_set(format:" ++ key ++ ")") (fromIntegral ret)
+                return ()
 
 formatNeedsGlobalHeader :: FormatContextHandle -> IO Bool
 formatNeedsGlobalHeader (FormatContextHandle fptr) =

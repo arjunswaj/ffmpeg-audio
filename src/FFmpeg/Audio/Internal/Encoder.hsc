@@ -9,17 +9,23 @@ module FFmpeg.Audio.Internal.Encoder
     , defaultAacConfig
     , defaultEac3Config
     , encodeAudioToFile
+    , encodeAudioToFileWithMetadata
+    , applyFormatMetadata
     , codecNameFor
     , defaultExtensionFor
     , selectSampleFormat
     , fillAudioFrame
+    , encodeAllFrames
     , sendFrameAndDrain
+    , sendFrameAndDrainWith
     , flushEncoderStream
+    , flushEncoderStreamWith
     ) where
 
-import Control.Exception (SomeException, bracket_, catch, throwIO)
+import Control.Exception (SomeException, bracket_, catch, finally, throwIO)
 import Control.Monad (when)
 import Data.Bits (shiftL, shiftR)
+import Data.ByteString qualified as BS
 import Data.Char (toLower)
 import Data.Int (Int16, Int32, Int64)
 import Data.List (isSuffixOf)
@@ -29,6 +35,8 @@ import Data.Vector.Storable qualified as VS
 import Foreign.C.Types (CUChar)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import Foreign.Storable (Storable, peekByteOff, peekElemOff, pokeByteOff, pokeElemOff, sizeOf)
+import System.Directory (removeFile)
+import System.IO (hClose, openTempFile)
 import FFmpeg.Audio.Internal.Codec
     ( codecSupportsSmallLastFrame
     , findEncoderByName
@@ -54,13 +62,20 @@ import FFmpeg.Audio.Internal.Format
     , openOutput
     , rescaleAndWriteFrame
     , setCodecParameters
+    , setFormatMetadata
     , setFormatStrictStdCompliance
     , setStreamTimeBase
     , withFormatContextWith
     , withOutputFile
     , writeFrame
-    , writeHeader
+    , writeHeaderWithOptions
     , writeTrailer
+    )
+import FFmpeg.Audio.Metadata
+    ( AudioMetadata(..)
+    , embedMp3Id3v2
+    , emptyAudioMetadata
+    , resolvedPlainLyrics
     )
 import FFmpeg.Audio.Internal.Frame
     ( FrameHandle
@@ -69,7 +84,7 @@ import FFmpeg.Audio.Internal.Frame
     , withFrame
     , withFrameWithLayout
     )
-import FFmpeg.Audio.Internal.Packet (getPacketPtr, unrefPacket, withPacket)
+import FFmpeg.Audio.Internal.Packet (PacketHandle, getPacketPtr, unrefPacket, withPacket)
 import FFmpeg.Audio.Internal.Types
     ( AVFrame
     , AVRational
@@ -250,8 +265,43 @@ encodePcmToFile path buf = do
 
             flushEncoder ctx fmt
 
+applyFormatMetadata :: FormatContextHandle -> AudioMetadata -> IO ()
+applyFormatMetadata fmt meta = do
+    setOpt "title" (metaTitle meta)
+    setOpt "artist" (metaArtist meta)
+    setOpt "album" (metaAlbum meta)
+    setOpt "lyrics" (resolvedPlainLyrics meta)
+  where
+    setOpt _ Nothing = return ()
+    setOpt k (Just v)
+        | null v = return ()
+        | otherwise = setFormatMetadata fmt k v
+
+isMp4LikeMuxer :: FilePath -> Maybe String -> Bool
+isMp4LikeMuxer path mFmt = case mFmt of
+    Just f -> f `elem` ["mp4", "ipod", "mov", "m4a"]
+    Nothing ->
+        let lower = map toLower path
+        in ".mp4" `isSuffixOf` lower || ".m4a" `isSuffixOf` lower || ".mov" `isSuffixOf` lower
+
 encodeAudioToFile :: FilePath -> CodecConfig -> AudioBuffer -> IO ()
-encodeAudioToFile path cfg buf = do
+encodeAudioToFile path cfg = encodeAudioToFileWithMetadata path cfg emptyAudioMetadata
+
+encodeAudioToFileWithMetadata :: FilePath -> CodecConfig -> AudioMetadata -> AudioBuffer -> IO ()
+encodeAudioToFileWithMetadata path cfg meta buf
+    | codecType cfg == CodecMp3 && meta /= emptyAudioMetadata = do
+        (tmpPath, h) <- openTempFile "/tmp" "ffmpeg-audio-meta.mp3"
+        hClose h
+        finally
+            (do
+                encodeAudioToFileRaw tmpPath cfg emptyAudioMetadata buf
+                rawBytes <- BS.readFile tmpPath
+                BS.writeFile path (embedMp3Id3v2 meta rawBytes))
+            (removeFile tmpPath `catch` (\(_ :: SomeException) -> return ()))
+    | otherwise = encodeAudioToFileRaw path cfg meta buf
+
+encodeAudioToFileRaw :: FilePath -> CodecConfig -> AudioMetadata -> AudioBuffer -> IO ()
+encodeAudioToFileRaw path cfg meta buf = do
     let sampleRate = audioSampleRate buf
         layout = audioLayout buf
         channels = audioChannels buf
@@ -267,8 +317,13 @@ encodeAudioToFile path cfg buf = do
             (CodecOpus, Nothing, LayoutAmbisonic _) -> [("mapping_family", 2)]
             _ -> []
         muxerName = resolveMuxerName path cfg
+        headerOpts =
+            if isMp4LikeMuxer path muxerName
+                then [("movflags", "+faststart")]
+                else []
     withFormatContextWith muxerName path $ \fmt -> do
         setFormatStrictStdCompliance fmt (-2)
+        applyFormatMetadata fmt meta
         needsGlobal <- formatNeedsGlobalHeader fmt
         let ccParams = CodecContextParams
                 { ccSampleRate = sampleRate
@@ -290,7 +345,7 @@ encodeAudioToFile path cfg buf = do
                 (openOutput fmt path)
                 (closeOutput fmt `catch` (\(_ :: SomeException) -> return ()))
                 (do
-                    writeHeader fmt
+                    writeHeaderWithOptions fmt headerOpts
                     encodeAllFrames ctx fmt sh codecTb samples layout channels sampleRate sampleFmt frameSize allowShort totalFrames
                     writeTrailer fmt)
 
@@ -308,30 +363,31 @@ encodeAllFrames
     -> Bool
     -> Int
     -> IO ()
-encodeAllFrames ctx fmt sh codecTb samples layout channels sampleRate sampleFmt frameSize allowShort totalFrames = do
-    let numFull = totalFrames `div` frameSize
-        remFrames = totalFrames `mod` frameSize
-    when (numFull > 0) $
-        withFrameWithLayout frameSize sampleRate layout sampleFmt $ \fh -> do
-            let loop idx
-                    | idx >= numFull = return ()
-                    | otherwise = do
-                        makeFrameWritable fh
-                        let startFrame = idx * frameSize
-                        fillAudioFrame (getFramePtr fh) samples channels frameSize frameSize startFrame sampleFmt
-                        pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral startFrame :: Int64)
-                        sendFrameAndDrain ctx fmt sh codecTb fh
-                        loop (idx + 1)
-            loop 0
-    when (remFrames > 0) $ do
-        let allocSamples = if allowShort then remFrames else frameSize
-            startFrame = numFull * frameSize
-        withFrameWithLayout allocSamples sampleRate layout sampleFmt $ \fh -> do
-            makeFrameWritable fh
-            fillAudioFrame (getFramePtr fh) samples channels allocSamples remFrames startFrame sampleFmt
-            pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral startFrame :: Int64)
-            sendFrameAndDrain ctx fmt sh codecTb fh
-    flushEncoderStream ctx fmt sh codecTb
+encodeAllFrames ctx fmt sh codecTb samples layout channels sampleRate sampleFmt frameSize allowShort totalFrames =
+    withPacket $ \ph -> do
+        let !numFull = totalFrames `div` frameSize
+            !remFrames = totalFrames `mod` frameSize
+        when (numFull > 0) $
+            withFrameWithLayout frameSize sampleRate layout sampleFmt $ \fh -> do
+                let loop !idx
+                        | idx >= numFull = return ()
+                        | otherwise = do
+                            makeFrameWritable fh
+                            let !startFrame = idx * frameSize
+                            fillAudioFrame (getFramePtr fh) samples channels frameSize frameSize startFrame sampleFmt
+                            pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral startFrame :: Int64)
+                            sendFrameAndDrainWith ctx fmt sh codecTb fh ph
+                            loop (idx + 1)
+                loop 0
+        when (remFrames > 0) $ do
+            let !allocSamples = if allowShort then remFrames else frameSize
+                !startFrame = numFull * frameSize
+            withFrameWithLayout allocSamples sampleRate layout sampleFmt $ \fh -> do
+                makeFrameWritable fh
+                fillAudioFrame (getFramePtr fh) samples channels allocSamples remFrames startFrame sampleFmt
+                pokeByteOff (castPtr (getFramePtr fh)) framePtsOffset (fromIntegral startFrame :: Int64)
+                sendFrameAndDrainWith ctx fmt sh codecTb fh ph
+        flushEncoderStreamWith ctx fmt sh codecTb ph
 
 clampFloat :: Float -> Float
 clampFloat x
@@ -399,13 +455,13 @@ fillAudioFrame framePtr samples channels nbSamples validSamples startFrame fmt =
         | otherwise = throwIO $ FFmpegError (-1) ("Unsupported packed sample format: " ++ show fmt)
 
     goPlanar :: Storable a => Ptr (Ptr CUChar) -> Int -> a -> (SampleData -> Int -> a) -> IO ()
-    goPlanar extData baseIdx zeroVal reader =
-        let goCh c
+    goPlanar extData !baseIdx zeroVal reader =
+        let goCh !c
                 | c >= channels = return ()
                 | otherwise = do
                     planeRaw <- peekElemOff extData c
                     let planePtr = castPtr planeRaw
-                        loop i
+                        loop !i
                             | i >= nbSamples = return ()
                             | i < validSamples = do
                                 pokeElemOff planePtr i (reader samples (baseIdx + i * channels + c))
@@ -418,12 +474,12 @@ fillAudioFrame framePtr samples channels nbSamples validSamples startFrame fmt =
         in goCh 0
 
     goPacked :: Storable a => Ptr (Ptr CUChar) -> Int -> a -> (SampleData -> Int -> a) -> IO ()
-    goPacked extData baseIdx zeroVal reader = do
+    goPacked extData !baseIdx zeroVal reader = do
         planeRaw <- peekElemOff extData 0
         let planePtr = castPtr planeRaw
-            totalCount = nbSamples * channels
-            validCount = validSamples * channels
-            loop i
+            !totalCount = nbSamples * channels
+            !validCount = validSamples * channels
+            loop !i
                 | i >= totalCount = return ()
                 | i < validCount = do
                     pokeElemOff planePtr i (reader samples (baseIdx + i))
@@ -434,46 +490,50 @@ fillAudioFrame framePtr samples channels nbSamples validSamples startFrame fmt =
         loop 0
 
 sendFrameAndDrain :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> FrameHandle -> IO ()
-sendFrameAndDrain ctx fmt sh codecTb fh = do
+sendFrameAndDrain ctx fmt sh codecTb fh =
+    withPacket (sendFrameAndDrainWith ctx fmt sh codecTb fh)
+
+sendFrameAndDrainWith :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> FrameHandle -> PacketHandle -> IO ()
+sendFrameAndDrainWith ctx fmt sh codecTb fh ph = do
     let ctxPtr = getCodecContextPtr ctx
     ret <- c_avcodec_send_frame ctxPtr (getFramePtr fh)
     _ <- errorNonNegative "avcodec_send_frame" (fromIntegral ret)
-    receivePacketsRescaled ctx fmt sh codecTb
+    receivePacketsRescaledWith ctx fmt sh codecTb ph
 
-receivePacketsRescaled :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> IO ()
-receivePacketsRescaled ctx fmt sh codecTb = do
+receivePacketsRescaledWith :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> PacketHandle -> IO ()
+receivePacketsRescaledWith ctx fmt sh codecTb ph = do
     let ctxPtr = getCodecContextPtr ctx
-    withPacket $ \ph -> do
-        let loop = do
-                ret <- c_avcodec_receive_packet ctxPtr (getPacketPtr ph)
-                if ret == 0
-                    then do
-                        rescaleAndWriteFrame fmt sh codecTb ph
-                        unrefPacket ph
-                        loop
-                    else if ret == averrorEagain
-                        then return ()
-                        else errorNonNegative "avcodec_receive_packet" (fromIntegral ret) >> return ()
-        loop
+        pktPtr = getPacketPtr ph
+        loop = do
+            ret <- c_avcodec_receive_packet ctxPtr pktPtr
+            if ret == 0
+                then do
+                    finally (rescaleAndWriteFrame fmt sh codecTb ph) (unrefPacket ph)
+                    loop
+                else if ret == averrorEagain
+                    then return ()
+                    else errorNonNegative "avcodec_receive_packet" (fromIntegral ret) >> return ()
+    loop
 
 flushEncoderStream :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> IO ()
-flushEncoderStream ctx fmt sh codecTb = do
+flushEncoderStream ctx fmt sh codecTb =
+    withPacket (flushEncoderStreamWith ctx fmt sh codecTb)
+
+flushEncoderStreamWith :: CodecContextHandle -> FormatContextHandle -> StreamHandle -> AVRational -> PacketHandle -> IO ()
+flushEncoderStreamWith ctx fmt sh codecTb ph = do
     let ctxPtr = getCodecContextPtr ctx
+        pktPtr = getPacketPtr ph
     ret <- c_avcodec_send_frame ctxPtr nullPtr
     _ <- errorNonNegative "avcodec_send_frame (flush)" (fromIntegral ret)
-    withPacket $ \ph -> do
-        let loop = do
-                ret' <- c_avcodec_receive_packet ctxPtr (getPacketPtr ph)
-                if ret' == averrorEof
-                    then return ()
-                    else if ret' == averrorEagain
-                        then return ()
-                        else do
-                            _ <- errorNonNegative "avcodec_receive_packet (flush)" (fromIntegral ret')
-                            rescaleAndWriteFrame fmt sh codecTb ph
-                            unrefPacket ph
-                            loop
-        loop
+    let loop = do
+            ret' <- c_avcodec_receive_packet ctxPtr pktPtr
+            if ret' == averrorEof || ret' == averrorEagain
+                then return ()
+                else do
+                    _ <- errorNonNegative "avcodec_receive_packet (flush)" (fromIntegral ret')
+                    finally (rescaleAndWriteFrame fmt sh codecTb ph) (unrefPacket ph)
+                    loop
+    loop
 
 deinterleaveToFrame :: Ptr AVFrame -> V.Vector Int16 -> Int -> Int -> Int -> IO ()
 deinterleaveToFrame frame samples channels nbSamples startOffset = do

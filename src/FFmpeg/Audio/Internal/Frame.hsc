@@ -6,8 +6,11 @@ module FFmpeg.Audio.Internal.Frame
     , freeFrame
     , withFrame
     , withFrameWithLayout
+    , withVideoFrame
+    , withEmptyFrame
     , setFrameParams
     , setFrameParamsWithLayout
+    , setVideoFrameParams
     , getFramePtr
     ) where
 
@@ -62,6 +65,17 @@ setFrameParamsWithLayout (FrameHandle fptr) nsamples rate layout fmt =
         let chLayoutPtr = castPtr (ptr `plusPtr` frameChLayoutOffset)
         initChannelLayout chLayoutPtr layout
 
+setVideoFrameParams :: FrameHandle -> Int -> Int -> AVPixelFormat -> IO ()
+setVideoFrameParams (FrameHandle fptr) w h pixFmt =
+    withForeignPtr fptr $ \ptr -> do
+        pokeByteOff (castPtr ptr) frameWidthOffset (fromIntegral w :: CInt)
+        pokeByteOff (castPtr ptr) frameHeightOffset (fromIntegral h :: CInt)
+        pokeByteOff (castPtr ptr) frameFormatOffset pixFmt
+        pokeByteOff (castPtr ptr) frameColorRangeOffset avColRangeMpeg
+        pokeByteOff (castPtr ptr) frameColorPrimariesOffset avColPriBt709
+        pokeByteOff (castPtr ptr) frameColorTrcOffset avColTrcBt709
+        pokeByteOff (castPtr ptr) frameColorspaceOffset avColSpcBt709
+
 getFrameBuffer :: FrameHandle -> IO ()
 getFrameBuffer (FrameHandle fptr) =
     withForeignPtr fptr $ \ptr -> do
@@ -92,6 +106,16 @@ withFrameWithLayout nsamples rate layout fmt action =
         allocateFrame
         freeFrame
         (\h -> setFrameParamsWithLayout h nsamples rate layout fmt >> getFrameBuffer h >> action h)
+
+withVideoFrame :: Int -> Int -> AVPixelFormat -> (FrameHandle -> IO a) -> IO a
+withVideoFrame w h pixFmt action =
+    bracket
+        allocateFrame
+        freeFrame
+        (\fh -> setVideoFrameParams fh w h pixFmt >> getFrameBuffer fh >> action fh)
+
+withEmptyFrame :: (FrameHandle -> IO a) -> IO a
+withEmptyFrame = bracket allocateFrame freeFrame
 
 getFramePtr :: FrameHandle -> Ptr AVFrame
 getFramePtr (FrameHandle fptr) = unsafeForeignPtrToPtr fptr

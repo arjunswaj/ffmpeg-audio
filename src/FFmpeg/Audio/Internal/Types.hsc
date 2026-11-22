@@ -27,6 +27,7 @@ data AVIAMFParamDefinition
 data AVIAMFMixGain
 
 type AVSampleFormat = CInt
+type AVPixelFormat = CInt
 type AVCodecID = CInt
 type AVMediaType = CInt
 
@@ -38,6 +39,7 @@ type AVMediaType = CInt
 #include <libavutil/frame.h>
 #include <libavutil/iamf.h>
 #include <libavutil/opt.h>
+#include <libavutil/pixfmt.h>
 #include <libavutil/rational.h>
 
 data AVRational = AVRational
@@ -68,6 +70,25 @@ instance Storable AVRational where
  , avSampleFormatDBLP      = AV_SAMPLE_FMT_DBLP
  }
 
+#{enum AVPixelFormat,
+ , avPixFmtNone            = AV_PIX_FMT_NONE
+ , avPixFmtYuv420p         = AV_PIX_FMT_YUV420P
+ , avPixFmtRgb24           = AV_PIX_FMT_RGB24
+ , avPixFmtBgr24           = AV_PIX_FMT_BGR24
+ , avPixFmtYuv422p         = AV_PIX_FMT_YUV422P
+ , avPixFmtYuv444p         = AV_PIX_FMT_YUV444P
+ , avPixFmtGray8           = AV_PIX_FMT_GRAY8
+ , avPixFmtPal8            = AV_PIX_FMT_PAL8
+ , avPixFmtYuvj420p        = AV_PIX_FMT_YUVJ420P
+ , avPixFmtYuvj422p        = AV_PIX_FMT_YUVJ422P
+ , avPixFmtYuvj444p        = AV_PIX_FMT_YUVJ444P
+ , avPixFmtRgba            = AV_PIX_FMT_RGBA
+ , avPixFmtBgra            = AV_PIX_FMT_BGRA
+ , avPixFmtRgb48be         = AV_PIX_FMT_RGB48BE
+ , avPixFmtRgba64be        = AV_PIX_FMT_RGBA64BE
+ , avPixFmtYa8             = AV_PIX_FMT_YA8
+ }
+
 #{enum AVCodecID,
  , avCodecIdNone           = AV_CODEC_ID_NONE
  , avCodecIdMp3            = AV_CODEC_ID_MP3
@@ -77,11 +98,38 @@ instance Storable AVRational where
  , avCodecIdEac3           = AV_CODEC_ID_EAC3
  , avCodecIdPcmS16Le       = AV_CODEC_ID_PCM_S16LE
  , avCodecIdPcmS24Le       = AV_CODEC_ID_PCM_S24LE
+ , avCodecIdH264           = AV_CODEC_ID_H264
+ , avCodecIdMjpeg          = AV_CODEC_ID_MJPEG
+ , avCodecIdPng            = AV_CODEC_ID_PNG
+ , avCodecIdMovText        = AV_CODEC_ID_MOV_TEXT
  }
 
 #{enum AVMediaType,
+ , avMediaTypeVideo        = AVMEDIA_TYPE_VIDEO
  , avMediaTypeAudio        = AVMEDIA_TYPE_AUDIO
+ , avMediaTypeSubtitle     = AVMEDIA_TYPE_SUBTITLE
  }
+
+avColRangeMpeg :: CInt
+avColRangeMpeg = #{const AVCOL_RANGE_MPEG}
+
+avColSpcBt709 :: CInt
+avColSpcBt709 = #{const AVCOL_SPC_BT709}
+
+avColPriBt709 :: CInt
+avColPriBt709 = #{const AVCOL_PRI_BT709}
+
+avColTrcBt709 :: CInt
+avColTrcBt709 = #{const AVCOL_TRC_BT709}
+
+avDispositionDefault :: CInt
+avDispositionDefault = #{const AV_DISPOSITION_DEFAULT}
+
+avPktFlagKey :: CInt
+avPktFlagKey = #{const AV_PKT_FLAG_KEY}
+
+avInputBufferPaddingSize :: Int
+avInputBufferPaddingSize = #{const AV_INPUT_BUFFER_PADDING_SIZE}
 
 avChannelLayoutMono :: #{type uint64_t}
 avChannelLayoutMono = #{const AV_CH_LAYOUT_MONO}
@@ -150,6 +198,27 @@ framePtsOffset = #{offset AVFrame, pts}
 frameDataArrayOffset :: Int
 frameDataArrayOffset = #{offset AVFrame, data}
 
+frameLinesizeOffset :: Int
+frameLinesizeOffset = #{offset AVFrame, linesize}
+
+frameWidthOffset :: Int
+frameWidthOffset = #{offset AVFrame, width}
+
+frameHeightOffset :: Int
+frameHeightOffset = #{offset AVFrame, height}
+
+frameColorRangeOffset :: Int
+frameColorRangeOffset = #{offset AVFrame, color_range}
+
+frameColorPrimariesOffset :: Int
+frameColorPrimariesOffset = #{offset AVFrame, color_primaries}
+
+frameColorTrcOffset :: Int
+frameColorTrcOffset = #{offset AVFrame, color_trc}
+
+frameColorspaceOffset :: Int
+frameColorspaceOffset = #{offset AVFrame, colorspace}
+
 frameExtendedDataOffset :: Int
 frameExtendedDataOffset = #{offset AVFrame, extended_data}
 
@@ -177,6 +246,9 @@ packetDurationOffset = #{offset AVPacket, duration}
 packetStreamIndexOffset :: Int
 packetStreamIndexOffset = #{offset AVPacket, stream_index}
 
+packetFlagsOffset :: Int
+packetFlagsOffset = #{offset AVPacket, flags}
+
 streamIndexOffset :: Int
 streamIndexOffset = #{offset AVStream, index}
 
@@ -189,11 +261,38 @@ streamTimeBaseOffset = #{offset AVStream, time_base}
 streamCodecparOffset :: Int
 streamCodecparOffset = #{offset AVStream, codecpar}
 
+streamDispositionOffset :: Int
+streamDispositionOffset = #{offset AVStream, disposition}
+
+streamMetadataOffset :: Int
+streamMetadataOffset = #{offset AVStream, metadata}
+
+streamAvgFrameRateOffset :: Int
+streamAvgFrameRateOffset = #{offset AVStream, avg_frame_rate}
+
+codecparCodecTypeOffset :: Int
+codecparCodecTypeOffset = #{offset AVCodecParameters, codec_type}
+
+codecparCodecIdOffset :: Int
+codecparCodecIdOffset = #{offset AVCodecParameters, codec_id}
+
+codecparCodecTagOffset :: Int
+codecparCodecTagOffset = #{offset AVCodecParameters, codec_tag}
+
+codecparExtradataOffset :: Int
+codecparExtradataOffset = #{offset AVCodecParameters, extradata}
+
+codecparExtradataSizeOffset :: Int
+codecparExtradataSizeOffset = #{offset AVCodecParameters, extradata_size}
+
 formatPbOffset :: Int
 formatPbOffset = #{offset AVFormatContext, pb}
 
 formatOformatOffset :: Int
 formatOformatOffset = #{offset AVFormatContext, oformat}
+
+formatMetadataOffset :: Int
+formatMetadataOffset = #{offset AVFormatContext, metadata}
 
 formatStrictStdComplianceOffset :: Int
 formatStrictStdComplianceOffset = #{offset AVFormatContext, strict_std_compliance}

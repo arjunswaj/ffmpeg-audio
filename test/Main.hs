@@ -12,6 +12,8 @@ import FormatSpec qualified
 import EncoderSpec qualified
 import MultiChannelSpec qualified
 import IamfSpec qualified
+import MetadataSpec qualified
+import Mp4Spec qualified
 
 main :: IO ()
 main = do
@@ -32,4 +34,6 @@ main = do
   EncoderSpec.tests
   MultiChannelSpec.tests
   IamfSpec.tests
+  MetadataSpec.tests
+  Mp4Spec.tests
   putStrLn "All tests passed!"

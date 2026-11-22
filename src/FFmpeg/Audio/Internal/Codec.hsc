@@ -2,6 +2,8 @@ module FFmpeg.Audio.Internal.Codec
     ( findMp3Encoder
     , findEncoderByName
     , findEncoderById
+    , findDecoderById
+    , findDecoderByName
     , CodecHandle(..)
     , getCodecPtr
     , codecCapabilities
@@ -22,7 +24,9 @@ import FFmpeg.Audio.Internal.Types
     , avCodecCapVariableFrameSize
     )
 import FFmpeg.Audio.Internal.FFI
-    ( c_avcodec_find_encoder
+    ( c_avcodec_find_decoder
+    , c_avcodec_find_decoder_by_name
+    , c_avcodec_find_encoder
     , c_avcodec_find_encoder_by_name
     )
 import FFmpeg.Audio.Internal.Error (FFmpegError(..))
@@ -53,6 +57,21 @@ findEncoderById codecId = do
     if ptr == nullPtr
         then throwIO $ FFmpegError (-1) ("Audio encoder not found for codec id: " ++ show codecId)
         else return $ CodecHandle ptr
+
+findDecoderById :: AVCodecID -> IO CodecHandle
+findDecoderById codecId = do
+    ptr <- c_avcodec_find_decoder codecId
+    if ptr == nullPtr
+        then throwIO $ FFmpegError (-1) ("Decoder not found for codec id: " ++ show codecId)
+        else return $ CodecHandle ptr
+
+findDecoderByName :: String -> IO CodecHandle
+findDecoderByName codecName =
+    withCString codecName $ \cName -> do
+        ptr <- c_avcodec_find_decoder_by_name cName
+        if ptr == nullPtr
+            then throwIO $ FFmpegError (-1) ("Decoder not found: " ++ codecName)
+            else return $ CodecHandle ptr
 
 getCodecPtr :: CodecHandle -> Ptr AVCodec
 getCodecPtr (CodecHandle p) = p
